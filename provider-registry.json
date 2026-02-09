@@ -1,0 +1,132 @@
+{
+  "$schema": "OpenClaw Provider Registry v4.0",
+  "_description": "Pre-verified model provider configurations based on real deployment experience",
+  "providers": {
+    "kimi": {
+      "_comment": "Kimi/Moonshot AI — 中国领先的 AI 模型",
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.kimi.com/coding",
+      "apiKeyEnvVar": "KIMI_API_KEY",
+      "models": [
+        {
+          "id": "kimi-latest",
+          "name": "Kimi Latest",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 128000,
+          "maxTokens": 8192
+        }
+      ],
+      "notes": "必须用 anthropic-messages（不是 openai-completions）。baseUrl 是 api.kimi.com/coding（不是 api.moonshot.cn）"
+    },
+    "minimax": {
+      "_comment": "Minimax — 使用 OpenAI 兼容端点",
+      "api": "openai-completions",
+      "baseUrl": "https://api.minimaxi.com/v1",
+      "apiKeyEnvVar": "MINIMAX_API_KEY",
+      "models": [
+        {
+          "id": "abab6.5s-chat",
+          "name": "MiniMax M2.1",
+          "reasoning": false,
+          "input": ["text"],
+          "cost": {
+            "input": 15,
+            "output": 60,
+            "cacheRead": 2,
+            "cacheWrite": 10
+          },
+          "contextWindow": 200000,
+          "maxTokens": 8192
+        }
+      ],
+      "notes": "必须用 openai-completions + /v1 端点。不要用 anthropic-messages + /anthropic 端点（认证头不兼容）。模型 ID 用 abab6.5s-chat（不是 MiniMax-M2.1）。中国区用 api.minimaxi.com，国际版用 api.minimax.io"
+    },
+    "openrouter": {
+      "_comment": "OpenRouter — 多模型聚合平台",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "apiKeyEnvVar": "OPENROUTER_API_KEY",
+      "models": [
+        {
+          "id": "anthropic/claude-sonnet-4-5",
+          "name": "Claude Sonnet 4.5 (via OpenRouter)",
+          "reasoning": false,
+          "input": ["text", "image"],
+          "contextWindow": 200000,
+          "maxTokens": 8192
+        }
+      ],
+      "notes": "标准 OpenAI 兼容格式，无特殊注意事项"
+    },
+    "volcengine": {
+      "_comment": "火山引擎 — 字节跳动云服务",
+      "api": "openai-completions",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+      "apiKeyEnvVar": "VOLCENGINE_API_KEY",
+      "models": [
+        {
+          "id": "ep-xxx",
+          "name": "Volcengine Endpoint (替换为你的 endpoint ID)",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 128000,
+          "maxTokens": 4096
+        }
+      ],
+      "notes": "模型 ID 是 endpoint ID（ep-xxx 格式）。Node.js 22+ 在 macOS 上可能有兼容性问题"
+    },
+    "ollama": {
+      "_comment": "Ollama — 本地/局域网自托管模型服务器",
+      "api": "openai-completions",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "apiKeyDefault": "ollama",
+      "models": [
+        {
+          "id": "qwen:7b",
+          "name": "Qwen 7B (示例，替换为实际模型)",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 32768,
+          "maxTokens": 8192
+        }
+      ],
+      "notes": "⚠️ 代理陷阱：OpenClaw 的 HTTP 客户端不尊重 NO_PROXY 环境变量。如果系统有代理且 Ollama 在远程 LAN IP 上，必须用 SSH 隧道将远程端口映射到 localhost。baseUrl 始终用 127.0.0.1（不要用 LAN IP）。apiKey 填 'ollama'（占位符）。"
+    },
+    "custom-openai": {
+      "_comment": "通用 OpenAI 兼容代理模板 — 适用于自建代理或其他兼容 API",
+      "api": "openai-completions",
+      "baseUrl": "USER_BASE_URL",
+      "apiKeyEnvVar": "CUSTOM_OPENAI_API_KEY",
+      "models": [
+        {
+          "id": "USER_MODEL_ID",
+          "name": "User Custom Model",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 128000,
+          "maxTokens": 8192
+        }
+      ],
+      "notes": "通用模板：用户需替换 baseUrl、apiKey、模型 ID。适用于自建代理（如 http://74.48.191.251:8317/v1）"
+    },
+    "custom-anthropic": {
+      "_comment": "通用 Anthropic 兼容代理模板 — 适用于 Claude 兼容 API",
+      "api": "anthropic-messages",
+      "baseUrl": "USER_BASE_URL",
+      "apiKeyEnvVar": "CUSTOM_ANTHROPIC_API_KEY",
+      "models": [
+        {
+          "id": "USER_MODEL_ID",
+          "name": "User Custom Model",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 200000,
+          "maxTokens": 8192
+        }
+      ],
+      "notes": "通用模板：用户需替换 baseUrl、apiKey、模型 ID。注意 anthropic-messages 使用 x-api-key 头"
+    }
+  }
+}

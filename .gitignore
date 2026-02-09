@@ -1,0 +1,10 @@
+# Claude Code 本地配置
+.claude/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.log
