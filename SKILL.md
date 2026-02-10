@@ -1,16 +1,16 @@
 ---
 name: openclaw-remote-deploy
-description: OpenClaw 远程一键部署（状态机 v4.7）— 30 分钟内完成含飞书/Telegram 集成的完整部署
+description: OpenClaw 远程一键部署（状态机 v4.11）— 30 分钟内完成含飞书/Telegram/钉钉集成的完整部署
 argument-hint: "[optional: windows/macos/linux]"
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Read, Write, Edit, Bash, Task, AskUserQuestion
 ---
 
-# OpenClaw Remote Deploy v4.7 — 状态机执行流程
+# OpenClaw Remote Deploy v4.11 — 状态机执行流程
 
 > 核心原则：**一次性收集所有信息 → 连续自动执行**
-> 时间预算：无 IM 13 min / 含飞书 30 min / 含 Telegram 18 min
+> 时间预算：无 IM 13 min / 含飞书 30 min / 含 Telegram 18 min / 含钉钉 20 min
 
 ## 技能包文件
 
@@ -67,7 +67,7 @@ Read ~/.openclaw/deployment-config.json
 #### 问题 2: 模型提供商
 读取 `provider-registry.json`，列出选项：
 - Kimi (Moonshot) — anthropic-messages
-- Minimax — openai-completions
+- Minimax Coding Plan — anthropic-messages ⚠️ 只支持 Coding Plan
 - OpenRouter — openai-completions
 - Volcengine (火山引擎) — openai-completions
 - Ollama (本地/局域网) — openai-completions ⚠️ 需额外网络检查
@@ -90,7 +90,8 @@ Read ~/.openclaw/deployment-config.json
 - 如果是，选择类型：
   - **飞书**：App ID + App Secret（可以稍后在 Phase 4 提供）
   - **Telegram**：Bot Token（可以稍后在 Phase 4 提供）
-  - **两者都要**：同时配置飞书和 Telegram
+  - **钉钉**：Corp ID + Client ID + Client Secret + Agent ID（可以稍后在 Phase 4 提供）
+  - **多个集成**：可以同时配置飞书、Telegram 和钉钉
 
 **收集完毕后，打印确认摘要，等待用户确认。**
 
@@ -104,6 +105,32 @@ node --version    # 需要 ≥22
 npm --version
 # Windows: echo %OS%  |  macOS/Linux: uname -s
 ```
+
+**macOS 特殊检查**：
+```bash
+# 检查 Xcode 命令行工具
+xcode-select -p
+# 如果返回错误，需要安装：xcode-select --install
+```
+
+**npm 权限检查（macOS/Linux）**：
+```bash
+# 检查 npm 全局安装目录权限
+npm config get prefix
+# 如果是 /usr/local，可能需要 sudo 权限
+```
+
+**如果检测到权限问题**，提供两种解决方案：
+1. **推荐**：配置 npm 使用用户目录（无需 sudo）
+```bash
+mkdir -p ~/.npm-global
+npm config set prefix '~/.npm-global'
+export PATH=~/.npm-global/bin:$PATH
+# 添加到 shell 配置文件
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc  # 或 ~/.zshrc
+```
+
+2. **备选**：使用 sudo 安装（需要用户手动输入密码）
 
 ### 1.2 检查 OpenClaw 安装状态
 ```bash
@@ -187,6 +214,7 @@ curl -s http://<baseUrl>/v1/models | head -c 200
   "env": { "<PROVIDER_API_KEY_VAR>": "<用户提供的 API Key>" },
   "gateway": {
     "bind": "loopback", "port": 18789,
+    "mode": "local",
     "auth": { "token": "<自动生成 64 位 hex>" },
     "controlUi": { "allowInsecureAuth": false }
   },
@@ -231,10 +259,16 @@ curl -s http://<baseUrl>/v1/models | head -c 200
 {
   "channels": {
     "feishu": {
-      "enabled": true, "dmPolicy": "pairing",
+      "enabled": true, "dmPolicy": "open",
+      "allowFrom": ["*"],
       "accounts": {
         "main": { "appId": "<用户提供>", "appSecret": "<用户提供>", "botName": "OpenClaw AI" }
       }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "feishu": { "enabled": true }
     }
   }
 }
@@ -253,7 +287,27 @@ curl -s http://<baseUrl>/v1/models | head -c 200
 }
 ```
 
-**同时配置两者**：
+**钉钉配置**：
+```json
+{
+  "channels": {
+    "dingtalk": {
+      "enabled": true,
+      "clientId": "<用户提供的 Client ID>",
+      "clientSecret": "<用户提供的 Client Secret>",
+      "robotCode": "<用户提供的 Client ID>",
+      "corpId": "<用户提供的 Corp ID>",
+      "agentId": "<用户提供的 Agent ID>",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "messageType": "markdown",
+      "debug": false
+    }
+  }
+}
+```
+
+**同时配置多个**：
 ```json
 {
   "channels": {
@@ -267,6 +321,18 @@ curl -s http://<baseUrl>/v1/models | head -c 200
       "enabled": true,
       "botToken": "<用户提供的 Bot Token>",
       "dmPolicy": "pairing"
+    },
+    "dingtalk": {
+      "enabled": true,
+      "clientId": "<用户提供的 Client ID>",
+      "clientSecret": "<用户提供的 Client Secret>",
+      "robotCode": "<用户提供的 Client ID>",
+      "corpId": "<用户提供的 Corp ID>",
+      "agentId": "<用户提供的 Agent ID>",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "messageType": "markdown",
+      "debug": false
     }
   }
 }
@@ -375,6 +441,110 @@ openclaw pairing approve telegram <配对码>
 ```
 
 **配对成功后，用户就可以在 Telegram 中与 OpenClaw AI 对话了！**
+
+### 4c: 钉钉集成 (20 min)
+
+#### 指导用户在钉钉开放平台操作 (12 min)
+
+输出精确的手动步骤指令：
+
+**步骤 1：获取开发者权限**（2 种方式）
+
+**方式 1：自己注册组织**
+1. 访问钉钉官网教程：https://alidocs.dingtalk.com/i/p/Y7kmbokZp3pgGLq2/docs/3KLw95QMzkb8gDMZ3qaDWAjrymPeEN2q
+2. 按照教程注册组织，获得管理员权限
+
+**方式 2：联系现有组织管理员**
+1. 联系你所在组织的管理员
+2. 让管理员给你开通开发者权限
+3. 参考文档：https://open.dingtalk.com/document/dingstart/get-developer-permissions
+
+**步骤 2：创建机器人应用**
+1. 打开钉钉开发者网页版：https://open-dev.dingtalk.com/
+2. 扫码登录，选择你有管理员权限的组织
+3. 确认主页显示你有开发者权限
+4. 添加机器人：
+   - 机器人简介和描述可以自定义
+   - **重要**：消息接收方式必须选择「Stream」，保持默认，不要修改
+
+**步骤 3：配置权限**
+1. 在权限管理中搜索「卡片」
+2. 将所有卡片相关权限全部打开
+
+**步骤 4：发布版本**
+1. 点击「版本管理与发布」
+2. 创建新版本（版本号和版本描述自定义）
+3. 保存后，**一定要在右边再点击「发布」按钮**
+
+**步骤 5：获取配置参数**
+在应用详情页面获取以下参数：
+- **Corp ID**（企业 ID）
+- **Client ID**（应用 ID）
+- **Client Secret**（应用密钥）
+- **Agent ID**（机器人 ID）
+
+#### 安装钉钉插件 (3 min)
+
+如果 Phase 0 未收集钉钉凭据，此时用 AskUserQuestion 收集：
+- Corp ID
+- Client ID
+- Client Secret
+- Agent ID
+
+**安装插件（方法 A - 推荐）**：
+```bash
+openclaw plugins install https://github.com/soimy/clawdbot-channel-dingtalk.git
+```
+
+**如果方法 A 失败（spawn EINVAL 错误），使用方法 B - 手动安装**：
+```bash
+# 1. 手动克隆仓库到扩展目录
+cd ~/.openclaw && mkdir -p extensions && cd extensions
+git clone https://github.com/soimy/clawdbot-channel-dingtalk.git dingtalk
+
+# 2. 安装依赖
+cd dingtalk && npm install
+```
+
+**验证安装**：
+```bash
+openclaw plugins list | grep ding
+# 应显示 "DingTalk Channel | dingtalk | loaded"
+```
+
+#### 配置钉钉插件 (3 min)
+
+**重要**：每条命令执行后，检查回显最后一条信息是否为「Restart the gateway to apply.」，如果不是，说明参数设置不对，配置未成功。
+
+逐条执行配置命令：
+```bash
+openclaw config set channels.dingtalk.enabled true
+openclaw config set channels.dingtalk.clientId <用户提供的 Client ID>
+openclaw config set channels.dingtalk.clientSecret <用户提供的 Client Secret>
+openclaw config set channels.dingtalk.robotCode <用户提供的 Client ID>
+openclaw config set channels.dingtalk.corpId <用户提供的 Corp ID>
+openclaw config set channels.dingtalk.agentId <用户提供的 Agent ID>
+openclaw config set channels.dingtalk.dmPolicy open
+openclaw config set channels.dingtalk.groupPolicy open
+openclaw config set channels.dingtalk.messageType markdown
+openclaw config set channels.dingtalk.debug false
+```
+
+**重启 Gateway**：
+```bash
+openclaw gateway restart
+sleep 5
+openclaw channels list  # 应显示 "DingTalk: configured, enabled"
+```
+
+#### 测试钉钉机器人 (2 min)
+
+1. 打开钉钉客户端
+2. 点击搜索，输入你的机器人名字
+3. 发送任意消息测试
+4. 机器人应该能够正常响应
+
+**注意**：钉钉机器人默认使用 `open` 策略（dmPolicy: open），无需配对即可使用。如果需要配对机制，可以将 dmPolicy 改为 `pairing`。
 
 ---
 
@@ -500,6 +670,7 @@ openclaw channels list      # ✓ 如果有 IM：显示对应 channel 状态
   Fallback: <fallback-info>
   飞书:     <已配置/未配置>
   Telegram: <已配置/未配置>
+  钉钉:     <已配置/未配置>
   Token:    <auth-token>
 ═══════════════════════════════════════
 ```
@@ -521,6 +692,7 @@ openclaw channels list      # ✓ 如果有 IM：显示对应 channel 状态
 - 备用模型: <是/否>
 - 飞书集成: <是/否>
 - Telegram 集成: <是/否>
+- 钉钉集成: <是/否>
 
 ## 部署过程
 - Phase 0 耗时: <分钟>
@@ -529,7 +701,10 @@ openclaw channels list      # ✓ 如果有 IM：显示对应 channel 状态
   - 是否需要安装 zod: <是/否>
 - Phase 2 耗时: <分钟>
 - Phase 3 耗时: <分钟>
-- Phase 4 耗时: <分钟>（如果有飞书）
+- Phase 4 耗时: <分钟>（如果有 IM 集成）
+  - 飞书: <分钟>
+  - Telegram: <分钟>
+  - 钉钉: <分钟>
 - Phase 5 耗时: <分钟>
 - **总耗时**: <分钟>
 
@@ -547,6 +722,7 @@ openclaw channels list      # ✓ 如果有 IM：显示对应 channel 状态
 - 模型测试: <成功/失败>
 - 飞书连接: <成功/失败/未配置>
 - Telegram 连接: <成功/失败/未配置>
+- 钉钉连接: <成功/失败/未配置>
 ```
 
 **文件位置**：
@@ -688,6 +864,14 @@ openclaw models list --all  # 查看所有可用模型
 
 | 症状 | 原因 | 快速修复 |
 |------|------|----------|
+| Gateway 启动失败 \"set gateway.mode=local\" | 配置缺少 gateway.mode | 在 openclaw.json 的 gateway 配置中添加 `"mode": "local"` |
+| npm 安装权限错误（macOS/Linux） | 无法写入 /usr/local | 配置 npm 使用用户目录：`mkdir -p ~/.npm-global && npm config set prefix '~/.npm-global' && export PATH=~/.npm-global/bin:$PATH` |
+| Xcode 命令行工具缺失（macOS） | npm 安装时报错 gyp | 执行 `xcode-select --install` |
+| MiniMax Coding Plan 配置错误 | 使用了错误的端点/API 类型 | 使用 anthropic-messages + https://api.minimaxi.com/anthropic + 模型 ID: MiniMax-M2.1 |
+| MiniMax API 返回 insufficient balance | 余额不足或配置错误 | 检查余额，确认使用正确的端点（付费版用 /v1，Coding Plan 用 /anthropic） |
+| Provider in cooldown (rate_limit) | API 返回错误后进入冷却 | 重启 Gateway：`openclaw gateway restart` |
+| 飞书插件状态为 disabled | 插件未启用 | 执行 `openclaw plugins enable feishu` 或在配置中添加 `plugins.entries.feishu.enabled: true` |
+| 飞书机器人无回复（pairing 策略） | pairing 策略可能阻止首次回复 | 改为 open 策略：`dmPolicy: "open"` + `allowFrom: ["*"]` |
 | ENOENT workspace | 路径错误 | 检查 OS 路径格式 |
 | 401/403 API 错误 | API 格式/URL 错误 | 对照 provider-registry.json |
 | duplicate plugin | 扩展目录冲突 | `rm -rf ~/.openclaw/extensions/<name>` |
@@ -699,7 +883,13 @@ openclaw models list --all  # 查看所有可用模型
 | Telegram 不响应 | Bot Token 错误 | 检查 Token 格式，重新从 @BotFather 获取 |
 | Telegram 配对失败 | 配对码过期 | 配对码 1 小时有效，重新发送消息获取新码 |
 | Telegram 连接失败 | 无法访问 api.telegram.org | 检查网络/防火墙/DNS，或配置代理 |
-| 模型返回 no output | 输出在其他环境 | 检查 Web/飞书/Telegram/其他 channels |
+| 钉钉插件安装失败（spawn EINVAL） | openclaw plugins install 命令错误 | 手动克隆：`cd ~/.openclaw/extensions && git clone https://github.com/soimy/clawdbot-channel-dingtalk.git dingtalk && cd dingtalk && npm install` |
+| 钉钉配置不生效 | 配置命令回显不正确 | 检查每条命令回显是否为「Restart the gateway to apply.」 |
+| 钉钉机器人不响应 | 参数配置错误 | 检查 Corp ID、Client ID、Client Secret、Agent ID 是否正确 |
+| 钉钉权限不足 | 缺少卡片权限 | 在钉钉开放平台权限管理中搜索「卡片」，全部打开 |
+| 钉钉消息接收方式错误 | 未选择 Stream 模式 | 在钉钉开放平台将消息接收方式改为「Stream」 |
+| 钉钉 open policy requires allowFrom | 缺少 allowFrom 配置 | 在配置中添加 `"allowFrom": ["*"]` |
+| 模型返回 no output | 输出在其他环境 | 检查 Web/飞书/Telegram/钉钉/其他 channels |
 | Connection error + LAN IP | 代理干扰 | SSH 隧道映射到 localhost，见 REFERENCE.md |
 | Ollama 连接超时 | 防火墙/Ollama 未监听 | 确认 `OLLAMA_HOST=0.0.0.0` 且防火墙放行 |
 
@@ -709,11 +899,43 @@ openclaw models list --all  # 查看所有可用模型
 
 ## 版本信息
 
-- **Skill 版本**: 4.7
+- **Skill 版本**: 4.11
 - **适用 OpenClaw 版本**: ≥ 2026.2.6-3
-- **最后更新**: 2026-02-09
+- **最后更新**: 2026-02-10
 - **更新内容**:
-  - 新增 Telegram Bot 集成支持（Phase 0、Phase 2、Phase 4、Phase 5）
-  - 将"飞书集成"改为"IM 集成"，支持飞书和 Telegram 两种选择
-  - 添加 Telegram 配置流程和故障排查
-  - 更新部署摘要和复盘模板，支持显示 Telegram 状态
+  - **v4.11 (2026-02-10)**:
+    - 🔥 **重要修正**：MiniMax 说明更新
+      - 明确说明：只支持 MiniMax Coding Plan
+      - 移除"免费版"/"付费版"的误导性说明
+      - Coding Plan 使用 Anthropic 兼容端点
+    - 📖 **新增**：手动部署 SOP 文档（MANUAL-SOP.md）
+      - 详细的远程协助部署流程
+      - Node.js 推荐浏览器下载（比 Homebrew 快）
+      - sudo 权限问题的 3 种解决方案
+      - 飞书配置详细步骤
+      - 钉钉配置：一次性收集参数，逐条执行命令
+      - 常见问题速查表
+  - **v4.10 (2026-02-10)**:
+    - 🔥 **重要修正**：MiniMax 配置更新
+      - 只支持 MiniMax Coding Plan（付费版），不再支持按量使用 API
+      - 原因：MiniMax API 和 Coding Plan 使用完全不同的 API Key，容易混淆导致错误
+      - 正确配置：anthropic-messages + https://api.minimaxi.com/anthropic + 模型 ID: MiniMax-M2.1 这里要区分国内和国外，国内是https://api.minimaxi.com/anthropic 国外是https://api.minimax.io/anthropic
+    - 新增 macOS 环境检查：Xcode 命令行工具、npm 权限检查
+    - 新增 npm 用户目录配置方案（避免 sudo 权限问题）
+    - 配置模板默认包含 `gateway.mode: "local"`（避免启动失败）
+    - 飞书配置默认使用 `open` 策略 + `allowFrom: ["*"]`（避免 pairing 策略问题）
+    - 飞书配置自动启用插件：`plugins.entries.feishu.enabled: true`
+    - 故障处理速查表新增 10+ 个常见问题和解决方案
+    - 基于两次实际部署经验（53 分钟 + 131 分钟）的优化
+  - **v4.9 (2026-02-09)**:
+    - 新增钉钉插件手动安装备选方案（解决 spawn EINVAL 错误）
+    - 更新故障处理速查：添加具体的手动安装命令
+    - 基于实际部署经验优化安装流程
+  - **v4.8 (2026-02-09)**:
+    - 新增钉钉（DingTalk）集成支持
+    - Phase 0：添加钉钉选项到 IM 集成选择
+    - Phase 2：添加钉钉配置 JSON 示例
+    - Phase 4c：新增钉钉集成完整流程（开发者权限获取、机器人创建、插件安装、参数配置）
+    - Phase 5：更新部署摘要和复盘模板，支持显示钉钉状态
+    - 故障处理速查：添加钉钉相关故障排查（插件安装、配置、权限、消息接收方式等）
+  - 支持飞书、Telegram、钉钉三种 IM 平台的任意组合配置

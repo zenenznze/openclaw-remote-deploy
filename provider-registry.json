@@ -17,30 +17,24 @@
           "maxTokens": 8192
         }
       ],
-      "notes": "必须用 anthropic-messages（不是 openai-completions）。baseUrl 是 api.kimi.com/coding（不是 api.moonshot.cn）"
+      "notes": "必须用 anthropic-messages（不是 openai-completions）。baseUrl 是 api.kimi.com/coding"
     },
     "minimax": {
-      "_comment": "Minimax — 使用 OpenAI 兼容端点",
-      "api": "openai-completions",
-      "baseUrl": "https://api.minimaxi.com/v1",
+      "_comment": "Minimax Coding Plan（付费版）— 使用 Anthropic 兼容端点，当前配置是国内端点",
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.minimaxi.com/anthropic",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "models": [
         {
-          "id": "abab6.5s-chat",
-          "name": "MiniMax M2.1",
+          "id": "MiniMax-M2.1",
+          "name": "MiniMax M2.1 (Coding Plan)",
           "reasoning": false,
           "input": ["text"],
-          "cost": {
-            "input": 15,
-            "output": 60,
-            "cacheRead": 2,
-            "cacheWrite": 10
-          },
           "contextWindow": 200000,
           "maxTokens": 8192
         }
       ],
-      "notes": "必须用 openai-completions + /v1 端点。不要用 anthropic-messages + /anthropic 端点（认证头不兼容）。模型 ID 用 abab6.5s-chat（不是 MiniMax-M2.1）。中国区用 api.minimaxi.com，国际版用 api.minimax.io"
+      "notes": "⚠️ 重要：MiniMax Coding Plan 必须用 anthropic-messages + /anthropic 端点。模型 ID 用 MiniMax-M2.1。注意：MiniMax 有多种 API 产品，本 skill 只支持 Coding Plan，使用 Anthropic 兼容端点。"
     },
     "openrouter": {
       "_comment": "OpenRouter — 多模型聚合平台",

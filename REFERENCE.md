@@ -75,35 +75,7 @@ openclaw gateway restart
 openclaw logs --follow                  # 查看日志
 ```
 
-### 问题 5: Minimax API 401/403 认证错误
 
-**根本原因**: OpenClaw 的 `anthropic-messages` 实现使用 `x-api-key` 头，而 Minimax Anthropic 兼容端点需要 `Authorization: Bearer`，两者不兼容。
-
-**解决方案**: 使用 OpenAI 兼容端点
-
-| 配置项 | 错误 ❌ | 正确 ✅ |
-|--------|---------|---------|
-| 端点 | `api.minimaxi.com/anthropic` | `api.minimaxi.com/v1` |
-| API 类型 | `anthropic-messages` | `openai-completions` |
-| 模型 ID | `MiniMax-M2.1` | `abab6.5s-chat` |
-
-**正确配置示例**:
-```json
-{
-  "models": {
-    "providers": {
-      "minimax": {
-        "baseUrl": "https://api.minimaxi.com/v1",
-        "api": "openai-completions",
-        "apiKey": "${MINIMAX_API_KEY}",
-        "models": [{ "id": "abab6.5s-chat", "name": "MiniMax M2.1" }]
-      }
-    }
-  }
-}
-```
-
-**配置后**: 删除 agent 级别配置 → 重启 Gateway → 测试
 
 ### 问题 6: 模型配置缺少 fallback
 
@@ -161,7 +133,7 @@ openclaw models list  # 应该显示 Auth: yes
 **预防措施**:
 - OAuth token 通常有有效期（如 30-90 天），定期检查和更新
 - 凭据文件位置：`~/.openclaw/credentials/<provider>-<profile>.json`
-- 如果经常遇到过期问题，考虑使用 API Key 方式（在 `models.providers` 中配置）
+
 
 **相关命令**:
 ```bash
@@ -318,142 +290,6 @@ schtasks /Run /TN "OpenClaw Gateway"
 | 直接启动 | 无需管理员权限，立即可用 | 关闭窗口后停止，不会开机自启 |
 | 安装为服务 | 开机自启动，后台运行 | 需要管理员权限 |
 
-### 问题 12: OpenClaw Rescue Dashboard Windows 部署
-
-**项目**: https://github.com/iamcheyan/openclaw-rescue-dashboard
-
-**用途**: Web 紧急控制面板，用于快速恢复 AI agent 故障（模型切换、会话解锁、服务重启）
-
-**Windows 部署问题与解决方案**:
-
-#### 问题 12.1: SSH 克隆失败
-**症状**: `Connection closed by 198.18.0.11 port 22`, `fatal: Could not read from remote repository`
-
-**解决方案**: 改用 HTTPS 克隆
-```bash
-# 失败: SSH 方式
-git clone git@github.com:iamcheyan/openclaw-rescue-dashboard.git
-
-# 成功: HTTPS 方式
-git clone https://github.com/iamcheyan/openclaw-rescue-dashboard.git
-```
-
-#### 问题 12.2: Windows 编码错误
-**症状**: `UnicodeEncodeError: 'gbk' codec can't encode character '\U0001f680'`
-
-**原因**: Python 代码中有 emoji，Windows 控制台默认 GBK 编码
-
-**解决方案**: 在 `app.py` 开头添加 UTF-8 编码设置
-```python
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-import sys
-import io
-
-# Fix Windows console encoding
-if sys.platform == 'win32':
-    try:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-    except:
-        pass
-```
-
-#### 问题 12.3: Windows 兼容性问题
-**症状**: `lsof: command not found`, `systemctl: command not found`
-
-**原因**: 代码使用了 Linux 专用命令
-
-**解决方案**: 修改 `kill_process_on_port` 函数
-```python
-def kill_process_on_port(port):
-    """Forcefully kill any process occupying the target port."""
-    try:
-        if sys.platform == 'win32':
-            # Windows: use netstat to find PID
-            result = subprocess.run(
-                ['netstat', '-ano'],
-                capture_output=True,
-                text=True
-            )
-            for line in result.stdout.split('\n'):
-                if f':{port}' in line and 'LISTENING' in line:
-                    parts = line.split()
-                    if parts:
-                        try:
-                            pid = int(parts[-1])
-                            subprocess.run(['taskkill', '/F', '/PID', str(pid)],
-                                         capture_output=True)
-                            print(f"[*] Terminated process {pid} on port {port}")
-                            time.sleep(1)
-                            return True
-                        except (ValueError, subprocess.CalledProcessError):
-                            pass
-        else:
-            # Linux/macOS: use lsof
-            result = subprocess.run(
-                ['lsof', '-ti', f':{port}'],
-                capture_output=True,
-                text=True
-            )
-            # ... (原有逻辑)
-```
-
-修改 `logic.py` 中的 `restart_service` 函数：
-```python
-def restart_service():
-    """Restarts the openclaw-gateway service"""
-    import sys
-    service_name = os.getenv("OPENCLAW_SERVICE", "openclaw-gateway")
-
-    try:
-        if sys.platform == 'win32':
-            # Windows: 提示手动重启
-            print(f"[!] Windows detected: Please manually restart OpenClaw")
-            print(f"[!] Tip: Close the OpenClaw window and restart it")
-            return False
-        else:
-            # Linux/macOS: use systemctl
-            subprocess.run(["systemctl", "--user", "restart", service_name], check=True)
-            return True
-    except Exception as e:
-        print(f"[!] Error restarting service {service_name}: {e}")
-        return False
-```
-
-#### 部署步骤
-```bash
-# 1. 克隆仓库
-git clone https://github.com/iamcheyan/openclaw-rescue-dashboard.git
-cd openclaw-rescue-dashboard
-
-# 2. 应用 Windows 兼容性修复（见上方代码）
-
-# 3. 创建启动脚本 start.bat
-@echo off
-chcp 65001 >nul
-echo Starting OpenClaw Rescue Dashboard...
-python app.py
-pause
-
-# 4. 启动 Dashboard
-python app.py
-# 或双击 start.bat
-
-# 5. 访问
-# http://localhost:8080
-```
-
-**环境变量（可选）**:
-- `OPENCLAW_DIR`: OpenClaw 配置目录（默认：`~/.openclaw`）
-- `DASHBOARD_PORT`: Dashboard 端口（默认：`8080`）
-- `OPENCLAW_SERVICE`: 服务名称（Windows 上不适用）
-
-**功能**:
-- ⚡ 紧急模型切换（一键随机切换到健康模型）
-- 🔓 会话管理（强制解锁所有活动会话）
-- 📊 提供商概览（查看所有配置的模型）
-- ⚠️ 注意：Windows 上无法自动重启服务，需手动重启 OpenClaw
 
 ---
 
@@ -509,7 +345,7 @@ openclaw --version  # 确认 >= 2026.2.6-3
    - https://open.feishu.cn/app → 创建企业自建应用
    - 权限管理 → 批量导入 `feishu-permissions.json` 的 scopes（包含所有 IM 权限）
    - 添加应用能力 → 机器人
-   - 事件订阅：长连接 + `im.message.receive_v1`（**必须在 OpenClaw 建立长连接后才能保存**）
+   - 事件订阅：长连接 + `im.message.receive_v1`（**必须在 OpenClaw 建立长连接后才能保存，而建立长连接首先需要成功配置到openclaw里，openclaw正常运行后，再去后台开启**）
    - 版本管理与发布 → 创建版本 → 发布
 5. **验证连接**：`openclaw channels list`（应显示 Feishu: ON - OK）
 6. **配对用户**：飞书发消息 → `openclaw pairing approve feishu <CODE>`
@@ -574,8 +410,6 @@ openclaw --version  # 确认 >= 2026.2.6-3
 
 | 提供商 | API 格式 | 踩坑点 |
 |--------|----------|--------|
-| Kimi/Moonshot | anthropic-messages | 不是 openai-completions，不是 api.moonshot.cn |
-| Minimax | openai-completions | 不是 anthropic-messages，用 /v1 不是 /anthropic |
 | OpenRouter | openai-completions | 标准格式 |
 | Volcengine | openai-completions | Node.js 22+ macOS 有兼容性问题 |
 | Ollama | openai-completions | 代理环境必须用 SSH 隧道，baseUrl 用 localhost 不要用 LAN IP |
