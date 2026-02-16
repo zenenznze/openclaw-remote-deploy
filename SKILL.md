@@ -24,7 +24,8 @@ allowed-tools: Read, Write, Edit, Bash, Task, AskUserQuestion
 | 4 | 429 限流报错 | OpenClaw 默认携带完整上下文 + 失败重试，新手建议先用消耗可控的模型 |
 | 5 | 中转站模型不可用 | 中转站可能模型不全或权限受限，优先用官方 API；**永远不要明文泄露 API Key** |
 | 6 | 代理/TUN 模式导致安装失败 | 安装前开启上网工具的 TUN 模式和系统代理，确保 npm 能访问国际网络 |
-| 7 | Windows PowerShell 执行策略限制 | 管理员权限运行 `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope LocalMachine -Force` |
+| 7 | Docker Build/Container 网络问题 (特别是 Fake IP 代理) | 容器内无法直接访问宿主机代理，建议将宿主机已安装的 OpenClaw 打包成镜像，或为 Docker 配置全局代理 |
+| 8 | Windows PowerShell 执行策略限制 | 管理员权限运行 `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope LocalMachine -Force` |
 
 ## 技能包文件
 
@@ -222,11 +223,63 @@ openclaw --version  # 检查是否已安装
 - 升级后验证：`openclaw --version`
 
 **如果未安装**：
-- **推荐方式**：直接使用 npm 全局安装
+- **推荐方式：直接使用 npm 全局安装**
   ```bash
   npm install -g openclaw@latest
   ```
-- **备选方式**：根据 OS 选择安装脚本（仅当 npm 安装失败时使用）
+- **备选方式 1：Docker 安装（推荐在 Docker 环境下部署）**
+  - **原因**：避免宿主机环境污染，易于管理和迁移。
+  - **注意**：Docker Build 过程中可能遇到网络问题，特别是当宿主机使用 Fake IP 模式的代理时。
+  - **安装步骤**：
+    1. **克隆 OpenClaw 仓库**
+       ```bash
+       cd /tmp && git clone --depth 1 https://github.com/openclaw/openclaw.git openclaw-docker-source
+       ```
+    2. **构建 Docker 镜像**
+       - **首选方法：直接打包宿主机已安装的 OpenClaw (推荐，避免网络问题)**
+         ```bash
+         # 找到宿主机 openclaw npm 包的安装目录
+         OPENCLAW_NPM_DIR=$(npm root -g)/openclaw
+         
+         # 创建临时 Dockerfile
+         cat << 'DOCKERFILE' > /tmp/openclaw-local.Dockerfile
+FROM node:22-slim
+WORKDIR /app
+COPY openclaw/ /app/
+RUN mkdir -p /home/node/.openclaw && chown -R node:node /home/node /app
+CMD ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789"]
+DOCKERFILE
+         # 构建镜像
+         docker build -f /tmp/openclaw-local.Dockerfile -t openclaw:local ${OPENCLAW_NPM_DIR}/..
+         ```
+       - **备选方法：通过 Dockerfile 构建 (可能遇到网络代理问题)**
+         ```bash
+         # 检查宿主机代理端口 (假设 FlClash 监听在 7890)
+         # ss -tlnp | grep -i clash 或 ss -tlnp | grep -E "7890|7891"
+         
+         # 如果代理存在且宿主机能访问外网，尝试将代理传入 Docker build
+         cd /tmp/openclaw-docker-source && docker build \
+           --build-arg HTTP_PROXY=http://host.docker.internal:<宿主机代理端口> \
+           --build-arg HTTPS_PROXY=http://host.docker.internal:<宿主机代理端口> \
+           --add-host=host.docker.internal:host-gateway \
+           -t openclaw:local .
+         ```
+         **Docker Build 代理踩坑**：
+         - `host.docker.internal` 解析为 Docker 内部 IP，可能无法访问宿主机代理。
+         - `Fake IP` 代理（如 FlClash）模式下，`host.docker.internal` 可能被劫持，导致 `curl` 或 `npm install` 失败。
+         - **终极解决方案**：临时关闭 `Fake IP` 模式，或使用 `docker build --network host` (但可能导致安全问题，不推荐)。
+    3. **部署 Docker Compose**
+       ```bash
+       # 复制 docker-compose.yml 到工作目录
+       cp /tmp/openclaw-docker-source/docker-compose.yml ~/openclaw/
+       
+       # 修改 docker-compose.yml 确保使用 openclaw:local 镜像，并配置好 volumes
+       # （参考 Phase 6.4 的 docker-compose.yml 端口配置最佳实践）
+       
+       # 启动容器
+       cd ~/openclaw && docker compose up -d
+       ```
+- **备选方式 2**：根据 OS 选择安装脚本（仅当 npm 安装失败时使用）
   - macOS/Linux: 读取 `install-openclaw.sh` → Bash 执行
   - Windows: 读取 `install-openclaw.ps1` → PowerShell 执行
 - 脚本功能：环境检查 → 安装 → 目录创建 → 权限修复 → 启动
@@ -1814,6 +1867,10 @@ openclaw gateway &
 | DNS 解析到 198.18.x.x (Fake IP) | Clash 等代理工具的 Fake IP 模式 | 在 Clash 配置中将 IM 渠道域名添加到 `fake-ip-filter` 或 `rules` 直连列表 |
 | API rate limit reached (FailoverError) | 中转站 API 达到速率限制 | 切换到官方 API 或 OAuth 模型（如 openai-codex），或等待速率限制重置 |
 | 渠道显示 running 但消息无回复 | 模型 API 失败或网络问题 | 检查日志中的 `lane task error` 和 `final reply failed`，确认模型 API 是否可用 |
+| Docker Build 连不上 npm registry (ECONNRESET, EOF) | Docker 容器网络问题，特别是宿主机代理使用了 Fake IP 模式。容器内部无法直接访问宿主机代理服务，或者代理无法将容器流量正确转发。 | **1. 推荐：直接打包宿主机已安装的 OpenClaw 成镜像 (见 Phase 1.2)**<br>2. 备选：为 Docker Build 配置代理，确保代理可被 `host.docker.internal` 访问；或临时关闭 `Fake IP` 代理模式，改用全局代理。<br>3. 排查 Docker DNS：`cat /etc/docker/daemon.json` 检查 `dns` 配置，确保 DNS 解析正确。如果 Docker 容器无法解析 `registry.npmjs.org`，也会导致连接失败。<br>4. 确认宿主机代理监听 `0.0.0.0` 而不是 `127.0.0.1`，方便容器访问。 |
+| Docker Build 过程被 Kill (SIGKILL) | Docker 环境资源限制（内存、CPU）或超时设置。 | 1. 尝试使用更轻量的 Dockerfile (移除不必要的安装，分层构建)。<br>2. 增加 Docker Build 的超时时间：`docker build --build-timeout <秒数>`。<br>3. **推荐：直接打包宿主机已安装的 OpenClaw 成镜像 (见 Phase 1.2)，避免耗时的构建过程。**<br>4. 检查 Docker Daemon 日志 (`journalctl -u docker.service`) 获取更多信息。 |
+| Docker Build 拉取基础镜像失败 (EOF, unauthorized) | Docker Hub 连接问题，可能是网络不稳定、防火墙限制或代理配置不正确。 | 1. 检查宿主机能否访问 Docker Hub：`docker pull hello-world`。<br>2. 确认 Docker Daemon 的代理配置是否正确 (如果需要)。<br>3. 重试 Docker Build 命令。 |
+| 宿主机代理（如 FlClash）开启 Fake IP 模式时，容器无法访问网络资源 | Fake IP 模式劫持 DNS 请求，Docker 容器的 DNS 和网络可能未正确配置以适配此模式。 | 1. **推荐：关闭 Fake IP 模式，或将容器使用的网络加入 FlClash 的直连列表**，让容器流量不经过 Fake IP 代理。<br>2. 尝试在 Docker Daemon 配置中设置 `dns` 为 FlClash 的 DNS 服务器。<br>3. 在 Docker Compose 中为容器配置 `network_mode: "host"` (仅限于测试环境，不推荐生产环境)。|
 
 **详细故障排查**：读取 `REFERENCE.md`
 

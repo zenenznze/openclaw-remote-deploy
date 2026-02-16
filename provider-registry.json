@@ -19,22 +19,62 @@
       ],
       "notes": "必须用 anthropic-messages（不是 openai-completions）。baseUrl 是 api.kimi.com/coding"
     },
-    "minimax": {
-      "_comment": "Minimax Coding Plan（付费版）— 使用 Anthropic 兼容端点，当前配置是国内端点",
+    "minimax-cn": {
+      "_comment": "Minimax Coding Plan（国内端点）— 使用 Anthropic 兼容端点",
       "api": "anthropic-messages",
       "baseUrl": "https://api.minimaxi.com/anthropic",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "models": [
         {
           "id": "MiniMax-M2.1",
-          "name": "MiniMax M2.1 (Coding Plan)",
+          "name": "MiniMax M2.1 (Coding Plan - 国内)",
           "reasoning": false,
           "input": ["text"],
           "contextWindow": 200000,
           "maxTokens": 8192
         }
       ],
-      "notes": "⚠️ 重要：MiniMax Coding Plan 必须用 anthropic-messages + /anthropic 端点。模型 ID 用 MiniMax-M2.1。注意：MiniMax 有多种 API 产品，本 skill 只支持 Coding Plan，使用 Anthropic 兼容端点。"
+      "notes": "国内端点：https://api.minimaxi.com/anthropic。使用 Anthropic 兼容 API。"
+    },
+    "minimax-intl": {
+      "_comment": "Minimax Coding Plan（国外端点）— 使用 Anthropic 兼容端点",
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.minimax.io/anthropic",
+      "apiKeyEnvVar": "MINIMAX_API_KEY",
+      "models": [
+        {
+          "id": "MiniMax-M2.1",
+          "name": "MiniMax M2.1 (Coding Plan - 国外)",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 200000,
+          "maxTokens": 8192
+        }
+      ],
+      "notes": "国外端点：https://api.minimax.io/anthropic。使用 Anthropic 兼容 API。"
+    },
+    "aliyun-qwen": {
+      "_comment": "阿里云千问（通义千问）— 使用 Anthropic 兼容端点",
+      "api": "anthropic-messages",
+      "baseUrl": "https://dashscope.aliyuncs.com/apps/anthropic",
+      "apiKeyEnvVar": "ALIYUN_API_KEY",
+      "models": [
+        {
+          "id": "qwen3-max-2026-01-23",
+          "name": "Qwen3 Max (Claude Opus 4.5 兼容)",
+          "reasoning": true,
+          "input": ["text", "image"],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 200000,
+          "maxTokens": 4096
+        }
+      ],
+      "notes": "阿里云千问通过 Anthropic 兼容端点提供服务。需要在阿里云百炼平台申请 API Key。"
     },
     "openrouter": {
       "_comment": "OpenRouter — 多模型聚合平台",
